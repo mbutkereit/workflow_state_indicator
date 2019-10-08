@@ -1,0 +1,7 @@
+indicator_control:
+  version: 1.x
+  js:
+    js/indicator_control.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal

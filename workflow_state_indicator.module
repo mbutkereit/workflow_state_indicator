@@ -1,0 +1,62 @@
+<?php
+
+/**
+ * @file
+ * Module file for customized workflow integration.
+ */
+
+use Drupal\Core\Render\Markup;
+
+function workflow_state_indicator_block_view_alter(array &$build, \Drupal\Core\Block\BlockPluginInterface $block) {
+  if ($block->getPluginId() === 'local_tasks_block') {
+    $build['#pre_render'][] = 'testfunction';
+  }
+}
+
+function testfunction($build) {
+  if (TRUE) {
+  } // check right route
+  // check same permission as main block
+  $node = \Drupal::request();
+  $node = $node->attributes->get('node');
+  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
+    $moderation_state = $node->moderation_state->value;
+
+    /** @var \Drupal\content_moderation\ModerationInformationInterface $moderation_info */
+    $moderation_info = Drupal::service('content_moderation.moderation_information');
+
+    /** @var \Drupal\workflows\WorkflowInterface $workflow */
+    $workflow = $moderation_info->getWorkflowForEntity($node);
+
+    $active_state = $workflow->getTypePlugin()->getState($moderation_state);
+    $state_name = !empty($active_state->label()) ? $active_state->label() : $active_state->id();
+
+    if (!empty($moderation_state)) {
+      $string = '<div class="tabs tabs__right">
+<span class="current_moderation_state" style="text-transform:capitalize;background: orange;border: 1px solid #00569d;padding: 0.5rem;border-radius: 0.3rem;color: white;">' . $state_name . '</span>'
+        . '<div class="current_moderation_state__settings">'
+        . '<input class="current_moderation_state__background_input" type="checkbox" name="show_background"/>'
+        . '</div>'
+        . '</div>';
+      $build['content'] = [
+        $build['content'],
+        ['#markup' => Markup::create($string)]
+      ];
+
+      $build['#attached'] = array(
+        'library' => array('nord8_workflows/indicator_control'),
+      );
+    }
+  }
+  return $build;
+}
+
+function workflow_state_indicator_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  $form['type_settings']['color'] = [
+    '#type' => 'textfield',
+    '#title' => t('Title'),
+    '#description' => t('Enter the title of the book. Note that the title must be at least 10 characters in length.'),
+    '#required' => TRUE,
+  ];
+
+}
