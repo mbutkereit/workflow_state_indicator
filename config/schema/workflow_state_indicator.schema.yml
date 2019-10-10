@@ -1,0 +1,8 @@
+# Schema file for the configuration files of the workflow_state_indicator module.
+workflow_state_indicator.settings:
+  type: config_object
+  label: 'Workflow State Indicator Settings'
+  mapping:
+    state_list:
+      type: string
+      label: 'Universal Button Placement'

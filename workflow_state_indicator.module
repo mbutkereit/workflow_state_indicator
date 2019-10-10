@@ -44,7 +44,7 @@ function testfunction($build) {
       ];
 
       $build['#attached'] = array(
-        'library' => array('nord8_workflows/indicator_control'),
+        'library' => array('workflow_state_indicator/indicator_control'),
       );
     }
   }
@@ -59,4 +59,25 @@ function workflow_state_indicator_form_alter(&$form, \Drupal\Core\Form\FormState
     '#required' => TRUE,
   ];
 
+}
+
+/**
+ *
+ */
+function workflow_fields_submit_handler(&$form, FormStateInterface &$form_state) {
+  $test = NULL;
+  /** @var \Drupal\Core\Entity\ContentEntity $entity */
+  $entity = $form_state->getFormObject()->getEntity();
+
+  $field_name = $entity->getName();
+
+  // Check if second not empty();
+  $entity_identifiere = $entity->getTargetEntityTypeId() . '.' . $entity->getTargetBundle();
+  $config_entity = _workflow_fields_get_config_entity($entity_identifiere);
+
+  $current_state[$field_name] = $form_state->getValue('permissions');
+
+  $config_entity->set('states', $current_state);
+
+  $config_entity->save();
 }
