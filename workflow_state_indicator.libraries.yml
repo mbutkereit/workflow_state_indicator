@@ -5,3 +5,9 @@ indicator_control:
   dependencies:
     - core/jquery
     - core/drupal
+
+indicator_control_css:
+  version: 1.x
+  css:
+    component:
+      css/base.css: { minified: false }

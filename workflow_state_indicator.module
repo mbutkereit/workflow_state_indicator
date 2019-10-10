@@ -8,7 +8,6 @@
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Block\BlockPluginInterface;
-use Drupal\Core\Render\Markup;
 
 /**
  * Implements hook_block_view_BASE_BLOCK_ID_alter().
@@ -41,33 +40,28 @@ function workflow_state_indicator_local_task_block_render($build) {
 
     /** @var \Drupal\workflows\WorkflowInterface $workflow */
     $workflow = $moderation_info->getWorkflowForEntity($entity);
-    $workflow_name = $workflow->id();
+    $workflow_id = $workflow->id();
 
     $active_state = $workflow->getTypePlugin()->getState($moderation_state);
-    $state_name = !empty($active_state->label()) ? $active_state->label() : $active_state->id();
+    $state_id = $active_state->id();
+    $state_name = !empty($active_state->label()) ? $active_state->label() : $state_id;
 
     if (!empty($moderation_state)) {
 
       $config = \Drupal::config('workflow_state_indicator.settings');
       $states = $config->get('states');
 
-      if (isset($states[$workflow_name][$state_name]['color'])) {
-        $default_value = $states[$workflow_name][$state_name]['color'];
+      if (isset($states[$workflow_id][$state_id]['color'])) {
+        $default_value = $states[$workflow_id][$state_id]['color'];
       }
 
-      $string = '<div class="tabs tabs__right">
-<span class="current_moderation_state" style="text-transform:capitalize;background:' . $default_value . ';border: 1px solid #00569d;padding: 0.5rem;border-radius: 0.3rem;color: white;">' . $state_name . '</span>'
-        . '<div class="current_moderation_state__settings">'
-        . '<input class="current_moderation_state__background_input" type="checkbox" name="show_background"/>'
-        . '</div>'
-        . '</div>';
       $build['content'] = [
         $build['content'],
-        ['#markup' => Markup::create($string)],
-      ];
-
-      $build['#attached'] = [
-        'library' => ['workflow_state_indicator/indicator_control'],
+        [
+          '#theme' => 'workflow_state_indicator',
+          '#background_color' => $default_value,
+          '#state_name' => $state_name
+        ]
       ];
     }
   }
@@ -84,7 +78,7 @@ function workflow_state_indicator_form_workflow_state_edit_form_alter(&$form, Fo
 
   /** @var \Drupal\workflows\Entity\Workflow $entity */
   $entity = $form_state->getFormObject()->getEntity();
-  $workflow_name = $entity->id();
+  $workflow_id = $entity->id();
 
   $config = \Drupal::config('workflow_state_indicator.settings');
   $states = $config->get('states');
@@ -98,11 +92,16 @@ function workflow_state_indicator_form_workflow_state_edit_form_alter(&$form, Fo
 
   $default_value = '';
 
-  if (isset($states[$workflow_name][$state_name]['color'])) {
-    $default_value = $states[$workflow_name][$state_name]['color'];
+  if (isset($states[$workflow_id][$state_name]['color'])) {
+    $default_value = $states[$workflow_id][$state_name]['color'];
   }
+  $form['workflow_state_indicator'] = [
+    '#type' => 'details',
+    '#title' => t('Workflow State Indicator'),
+    '#open' => TRUE,
+  ];
 
-  $form['workflow_state_color'] = [
+  $form['workflow_state_indicator']['workflow_state_color'] = [
     '#type' => 'textfield',
     '#title' => t('Color'),
     '#description' => t('Enter the color code for the workflow state background. Note that the color must be hexadecimal e.g #000000.'),
@@ -133,4 +132,18 @@ function workflow_state_indicator_submit_handler(&$form, FormStateInterface &$fo
   $old_config = $config->get('states');
   $old_config[$workflow_name][$state_name]['color'] = $form_state->getValue('workflow_state_color');
   $config->set('states', $old_config)->save();
+}
+
+/**
+ * Implements hook_theme()
+ */
+function workflow_state_indicator_theme($existing, $type, $theme, $path) {
+  return [
+    'workflow_state_indicator' => [
+      'variables' => [
+        'background_color' => NULL,
+        'state_name' => NULL
+      ],
+    ],
+  ];
 }

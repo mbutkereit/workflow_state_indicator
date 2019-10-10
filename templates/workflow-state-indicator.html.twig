@@ -1,0 +1,11 @@
+{{ attach_library('workflow_state_indicator/indicator_control') }}
+{{ attach_library('workflow_state_indicator/indicator_control_css') }}
+
+<div class="tabs tabs__right workflow_state_indicator_tabs__right">
+    <span class="current_moderation_state"
+          style="background:{{ background_color }};">{{ state_name }}</span>
+    <div class="current_moderation_state__settings">
+        <label for="show_background">{{ 'Set background color:'|t }}</label>
+        <input class="current_moderation_state__background_input" type="checkbox" name="show_background"/>
+    </div>
+</div>
