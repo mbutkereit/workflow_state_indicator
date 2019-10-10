@@ -8,6 +8,7 @@
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Block\BlockPluginInterface;
+use Drupal\Core\Url;
 
 /**
  * Implements hook_block_view_BASE_BLOCK_ID_alter().
@@ -30,6 +31,12 @@ function workflow_state_indicator_local_task_block_render($build) {
   $request = \Drupal::request();
   $entity = $request->attributes->get('node');
   $route = $request->attributes->get('_route');
+
+  $config = \Drupal::config('workflow_state_indicator.settings');
+  $local_task_visible = $config->get('local_task');
+  if (is_int($local_task_visible) && !$local_task_visible) {
+    return $build;
+  }
 
   if ($entity instanceof ContentEntityInterface &&
     $route == 'entity.node.canonical') {
@@ -60,8 +67,8 @@ function workflow_state_indicator_local_task_block_render($build) {
         [
           '#theme' => 'workflow_state_indicator',
           '#background_color' => $default_value,
-          '#state_name' => $state_name
-        ]
+          '#state_name' => $state_name,
+        ],
       ];
     }
   }
@@ -112,6 +119,82 @@ function workflow_state_indicator_form_workflow_state_edit_form_alter(&$form, Fo
 }
 
 /**
+ * Implements hook_toolbar().
+ */
+function workflow_state_indicator_toolbar() {
+  $user = \Drupal::currentUser();
+
+  if (!$user->hasPermission('access workflow indicator')) {
+    return [];
+  }
+
+  $config = \Drupal::config('workflow_state_indicator.settings');
+  $admin_menu_visible = $config->get('admin_menu');
+  if (is_int($admin_menu_visible) && !$admin_menu_visible) {
+    return [];
+  }
+
+  $items['workflow_state_indicator'] = [
+    '#cache' => [
+      'contexts' => [
+        'user.permissions',
+        'url',
+      ],
+    ],
+  ];
+
+  // Todo add it to all entity types.
+  $request = \Drupal::request();
+  $entity = $request->attributes->get('node');
+  $route = $request->attributes->get('_route');
+  if ($entity instanceof ContentEntityInterface &&
+    $route == 'entity.node.canonical') {
+    $moderation_state = $entity->moderation_state->value;
+
+    /** @var \Drupal\content_moderation\ModerationInformationInterface $moderation_info */
+    $moderation_info = Drupal::service('content_moderation.moderation_information');
+
+    /** @var \Drupal\workflows\WorkflowInterface $workflow */
+    $workflow = $moderation_info->getWorkflowForEntity($entity);
+    $workflow_id = $workflow->id();
+
+    $active_state = $workflow->getTypePlugin()->getState($moderation_state);
+    $state_id = $active_state->id();
+    $state_name = !empty($active_state->label()) ? $active_state->label() : $state_id;
+
+    if (!empty($moderation_state)) {
+
+      $config = \Drupal::config('workflow_state_indicator.settings');
+      $states = $config->get('states');
+
+      if (isset($states[$workflow_id][$state_id]['color'])) {
+        $default_value = $states[$workflow_id][$state_id]['color'];
+      }
+
+      $cache_tag = $entity->getEntityType()->id() . ':' . $entity->id();
+
+      $items['workflow_state_indicator'] += [
+        '#type' => 'toolbar_item',
+        'tab' => [
+          '#type' => 'link',
+          '#title' => $state_name,
+          '#url' => Url::fromRoute('workflow_state_indicator.settings', [], ['query' => \Drupal::destination()->getAsArray()]),
+          '#attributes' => [
+            'title' => t('Current workflow state'),
+            'class' => ['use-ajax', 'toolbar-icon', 'toolbar-icon-workflow-state-indicator', 'toolbar-icon-system-admin-content'],
+            'style' => ['background:' . $default_value . ';'],
+          ],
+          '#cache' => ['tags' => [$cache_tag]],
+        ],
+        '#weight' => 502,
+      ];
+    }
+  }
+
+  return $items;
+}
+
+/**
  * A separate submit handler for the workflow_state_edit form.
  *
  * In the normal workflow_state_edit form is it only possible
@@ -142,7 +225,7 @@ function workflow_state_indicator_theme($existing, $type, $theme, $path) {
     'workflow_state_indicator' => [
       'variables' => [
         'background_color' => NULL,
-        'state_name' => NULL
+        'state_name' => NULL,
       ],
     ],
   ];

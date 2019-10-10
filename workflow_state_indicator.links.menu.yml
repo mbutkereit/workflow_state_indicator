@@ -1,0 +1,6 @@
+workflow_state_indicator:
+  settings:
+  title: 'Workflow State Indicator Settings'
+  route_name: workflow_state_indicator.settings
+  description: 'Configure workflow state indicator.'
+  parent: system.admin_config_workflow
