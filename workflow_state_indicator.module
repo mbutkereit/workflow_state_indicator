@@ -5,79 +5,132 @@
  * Module file for customized workflow integration.
  */
 
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Block\BlockPluginInterface;
 use Drupal\Core\Render\Markup;
 
-function workflow_state_indicator_block_view_alter(array &$build, \Drupal\Core\Block\BlockPluginInterface $block) {
-  if ($block->getPluginId() === 'local_tasks_block') {
-    $build['#pre_render'][] = 'testfunction';
+/**
+ * Implements hook_block_view_BASE_BLOCK_ID_alter().
+ */
+function workflow_state_indicator_block_view_local_tasks_block_alter(array &$build, BlockPluginInterface $block) {
+  $user = \Drupal::currentUser();
+
+  if ($user->hasPermission('access workflow indicator')) {
+    $build['#pre_render'][] = 'workflow_state_indicator_local_task_block_render';
   }
 }
 
-function testfunction($build) {
-  if (TRUE) {
-  } // check right route
-  // check same permission as main block
-  $node = \Drupal::request();
-  $node = $node->attributes->get('node');
-  if ($node instanceof \Drupal\Core\Entity\ContentEntityInterface) {
-    $moderation_state = $node->moderation_state->value;
+/**
+ * Custom pre_render function for the local task block.
+ */
+function workflow_state_indicator_local_task_block_render($build) {
+  $default_value = 'none';
+
+  // Todo add it to all entity types.
+  $request = \Drupal::request();
+  $entity = $request->attributes->get('node');
+  $route = $request->attributes->get('_route');
+
+  if ($entity instanceof ContentEntityInterface &&
+    $route == 'entity.node.canonical') {
+    $moderation_state = $entity->moderation_state->value;
 
     /** @var \Drupal\content_moderation\ModerationInformationInterface $moderation_info */
     $moderation_info = Drupal::service('content_moderation.moderation_information');
 
     /** @var \Drupal\workflows\WorkflowInterface $workflow */
-    $workflow = $moderation_info->getWorkflowForEntity($node);
+    $workflow = $moderation_info->getWorkflowForEntity($entity);
+    $workflow_name = $workflow->id();
 
     $active_state = $workflow->getTypePlugin()->getState($moderation_state);
     $state_name = !empty($active_state->label()) ? $active_state->label() : $active_state->id();
 
     if (!empty($moderation_state)) {
+
+      $config = \Drupal::config('workflow_state_indicator.settings');
+      $states = $config->get('states');
+
+      if (isset($states[$workflow_name][$state_name]['color'])) {
+        $default_value = $states[$workflow_name][$state_name]['color'];
+      }
+
       $string = '<div class="tabs tabs__right">
-<span class="current_moderation_state" style="text-transform:capitalize;background: orange;border: 1px solid #00569d;padding: 0.5rem;border-radius: 0.3rem;color: white;">' . $state_name . '</span>'
+<span class="current_moderation_state" style="text-transform:capitalize;background:' . $default_value . ';border: 1px solid #00569d;padding: 0.5rem;border-radius: 0.3rem;color: white;">' . $state_name . '</span>'
         . '<div class="current_moderation_state__settings">'
         . '<input class="current_moderation_state__background_input" type="checkbox" name="show_background"/>'
         . '</div>'
         . '</div>';
       $build['content'] = [
         $build['content'],
-        ['#markup' => Markup::create($string)]
+        ['#markup' => Markup::create($string)],
       ];
 
-      $build['#attached'] = array(
-        'library' => array('workflow_state_indicator/indicator_control'),
-      );
+      $build['#attached'] = [
+        'library' => ['workflow_state_indicator/indicator_control'],
+      ];
     }
   }
+
   return $build;
 }
 
-function workflow_state_indicator_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
-  $form['type_settings']['color'] = [
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function workflow_state_indicator_form_workflow_state_edit_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+
+  $form['actions']['submit']['#submit'][] = 'workflow_state_indicator_submit_handler';
+
+  /** @var \Drupal\workflows\Entity\Workflow $entity */
+  $entity = $form_state->getFormObject()->getEntity();
+  $workflow_name = $entity->id();
+
+  $config = \Drupal::config('workflow_state_indicator.settings');
+  $states = $config->get('states');
+
+  $state_name = '';
+
+  if (isset($form['id']['#type']) &&
+    $form['id']['#type'] == 'machine_name') {
+    $state_name = $form['id']['#default_value'];
+  }
+
+  $default_value = '';
+
+  if (isset($states[$workflow_name][$state_name]['color'])) {
+    $default_value = $states[$workflow_name][$state_name]['color'];
+  }
+
+  $form['workflow_state_color'] = [
     '#type' => 'textfield',
-    '#title' => t('Title'),
-    '#description' => t('Enter the title of the book. Note that the title must be at least 10 characters in length.'),
-    '#required' => TRUE,
+    '#title' => t('Color'),
+    '#description' => t('Enter the color code for the workflow state background. Note that the color must be hexadecimal e.g #000000.'),
+    '#required' => FALSE,
+    '#default_value' => $default_value,
   ];
 
 }
 
 /**
+ * A separate submit handler for the workflow_state_edit form.
  *
+ * In the normal workflow_state_edit form is it only possible
+ * to save the default values, everything else will be saved
+ * but are not easy accessible. This is the reason why we create
+ * a separate config for the workflow state indicator.
  */
-function workflow_fields_submit_handler(&$form, FormStateInterface &$form_state) {
-  $test = NULL;
-  /** @var \Drupal\Core\Entity\ContentEntity $entity */
+function workflow_state_indicator_submit_handler(&$form, FormStateInterface &$form_state) {
+  /** @var \Drupal\workflows\Entity\Workflow $entity */
   $entity = $form_state->getFormObject()->getEntity();
 
-  $field_name = $entity->getName();
+  $workflow_name = $entity->id();
+  $state_name = $form_state->getValue('id');
 
-  // Check if second not empty();
-  $entity_identifiere = $entity->getTargetEntityTypeId() . '.' . $entity->getTargetBundle();
-  $config_entity = _workflow_fields_get_config_entity($entity_identifiere);
+  $config = \Drupal::service('config.factory')
+    ->getEditable('workflow_state_indicator.settings');
 
-  $current_state[$field_name] = $form_state->getValue('permissions');
-
-  $config_entity->set('states', $current_state);
-
-  $config_entity->save();
+  $old_config = $config->get('states');
+  $old_config[$workflow_name][$state_name]['color'] = $form_state->getValue('workflow_state_color');
+  $config->set('states', $old_config)->save();
 }
